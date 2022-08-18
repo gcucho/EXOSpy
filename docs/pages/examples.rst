@@ -3,6 +3,9 @@ Examples
 
 We have implemented four examples to describe the use of EXOSpy library. These can be found below:
 
+Notebooks
+=========
+
 .. toctree::
     :maxdepth: 1
 
