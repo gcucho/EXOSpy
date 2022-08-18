@@ -40,11 +40,14 @@ release = '2.3'
 # ones.
 extensions = []
 extensions += ['sphinx.ext.mathjax']
+extensions += ['autoapi.extension']
 extensions += ['sphinx.ext.viewcode']
 extensions += ['sphinx.ext.napoleon']
 extensions += ['sphinx.ext.extlinks']
-extensions += ['sphinx_rtd_theme']
 extensions += ['nbsphinx']
+extensions += ['sphinx_rtd_theme']
+extensions += ['sphinx_gallery.load_style']
+extensions += ['sphinxcontrib.video']
 
 add_module_names = False
 autoapi_type = 'python'
