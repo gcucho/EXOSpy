@@ -40,7 +40,6 @@ release = '2.3'
 # ones.
 extensions = []
 extensions += ['sphinx.ext.mathjax']
-extensions += ['autoapi.extension']
 extensions += ['sphinx.ext.viewcode']
 extensions += ['sphinx.ext.napoleon']
 extensions += ['sphinx.ext.extlinks']
@@ -48,20 +47,21 @@ extensions += ['nbsphinx']
 extensions += ['sphinx_rtd_theme']
 extensions += ['sphinx_gallery.load_style']
 extensions += ['sphinxcontrib.video']
+#extensions += ['autoapi.extension']
 
 add_module_names = False
-autoapi_type = 'python'
-autoapi_dirs = ['../exospy']
-autoapi_file_patterns = ['*.py']
-autoapi_options = ['members', 'undoc-members']
-autoapi_python_class_content = 'both'
-autoapi_add_toctree_entry = False
+#autoapi_type = 'python'
+#autoapi_dirs = ['../exospy']
+#autoapi_file_patterns = ['*.py']
+#autoapi_options = ['members', 'undoc-members']
+#autoapi_python_class_content = 'both'
+#autoapi_add_toctree_entry = False
 
 napoleon_use_param = False
 napoleon_use_keyword = False
 napoleon_use_ivar = True
 
-extlinks = {'repo': ('https://github.com/gcucho/EXOSpy/tree/master/%s', None)}
+extlinks = {'repo': ('https://github.com/gcucho/EXOSpy/tree/main/%s', None)}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
