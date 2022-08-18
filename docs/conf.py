@@ -44,7 +44,6 @@ extensions += ['sphinx.ext.viewcode']
 extensions += ['sphinx.ext.napoleon']
 extensions += ['sphinx.ext.extlinks']
 extensions += ['sphinx_rtd_theme']
-extensions += ['sphinx_gallery.load_style']
 extensions += ['sphinxcontrib.video']
 
 add_module_names = False
