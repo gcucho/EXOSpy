@@ -5,12 +5,20 @@ EXOSpy Project
 
 EXOSpy is an open-source python-based library to investigate the terrestrial exosphere and its FUV emission.
 
+Doc Contents
+============
+
+.. toctree::
+    :maxdepth: 2
+
+    pages/installation
+    pages/examples
 
 Developers & Co-authors
 =======================
 
-* Gonzalo Cucho-Padin(D)
-* Dolon Bhattacharyya(D)
+* Gonzalo Cucho-Padin (Dev)
+* Dolon Bhattacharyya (Dev)
 * David Sibeck (CA)
 * Hyunju Connor (CA)
 * Allison Youngblood (CA)
