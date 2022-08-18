@@ -6,7 +6,7 @@ We have implemented four examples to describe the use of EXOSpy library. These c
 .. toctree::
     :maxdepth: 1
 
-    /notebooks/EXOSpy_Example1.ipynb
-    /notebooks/EXOSpy_Example2.ipynb
-    /notebooks/EXOSpy_Example3.ipynb
-    /notebooks/EXOSpy_Example4.ipynb
+    /notebooks/Example1.ipynb
+    /notebooks/Example2.ipynb
+    /notebooks/Example3.ipynb
+    /notebooks/Example4.ipynb
