@@ -40,7 +40,6 @@ release = '2.3'
 # ones.
 extensions = []
 extensions += ['sphinx.ext.mathjax']
-extensions += ['autoapi.extension']
 extensions += ['sphinx.ext.viewcode']
 extensions += ['sphinx.ext.napoleon']
 extensions += ['sphinx.ext.extlinks']
