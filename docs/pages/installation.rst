@@ -8,7 +8,7 @@ EXOSpy 2.3 has been uploaded to the PyPi repository and can be installed using t
 
 
 Uninstalling EXOSpy
-*******************
+===================
 
 To uninstall EXOSpy, simply type the following command::
 
