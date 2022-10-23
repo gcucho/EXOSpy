@@ -28,6 +28,11 @@ Manuscript
 ==========
 EXOSpy: A Python Library to Investigate the Terrestrial Exosphere and its FUV Emission, submitted to Frontiers Astronomy and Space Science, special issue: Snakes on a Spaceship—An Overview of Python in Space Physics.[Under Revision]
 
-DOI
-==========
-[![DOI](https://zenodo.org/badge/525983269.svg)](https://zenodo.org/badge/latestdoi/525983269)
+DOI & Citation
+=========
+.. image:: https://zenodo.org/badge/525983269.svg
+   :target: https://zenodo.org/badge/latestdoi/525983269
+
+If you use this library, please cite it by using the following bibtex link:
+
+``@software{EXOSpy2022, author       = {Cucho-Padin, G. and Bhattacharyya, D. and Sibeck, D. and Connor, H. and Youngblood, A. and Ardila, D.}, title        = {{EXOSpy}: Initial Release}, month        = October, year         = 2022, publisher    = {Zenodo}, version      = {v2.3.0}, doi          = {10.5281/zenodo.7240590}, url          = {https://doi.org/10.5281/zenodo.7240590}}``
