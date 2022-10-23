@@ -10,9 +10,9 @@ Requires: NumPy, SciPy, Scikit-learn
 ## Example Notebooks
 
 There are four (4) notebooks with examples of how to use the EXOSpy library. The notebooks have been tested in Jupyter using python 3.5 
-- NoteBook
+Example
 
 
-## Readthedocs
+## Readthedocs Website
 
 [https://exospy.readthedocs.io/en/latest/](https://exospy.readthedocs.io/en/latest/)
