@@ -26,4 +26,8 @@ Developers & Co-authors
 
 Manuscript
 ==========
-EXOSpy: A Python Library to Investigate the Terrestrial Exosphere and its FUV Emission, submitted to Frontiers Astronomy and Space Science, special issue: Snakes on a Spaceship—An Overview of Python in Space Physics.
+EXOSpy: A Python Library to Investigate the Terrestrial Exosphere and its FUV Emission, submitted to Frontiers Astronomy and Space Science, special issue: Snakes on a Spaceship—An Overview of Python in Space Physics.[Under Revision]
+
+DOI
+==========
+[![DOI](https://zenodo.org/badge/525983269.svg)](https://zenodo.org/badge/latestdoi/525983269)
