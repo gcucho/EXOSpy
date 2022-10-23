@@ -7,7 +7,7 @@ GitHub/Zenodo repository of the EXOSpy python library. It contains the source co
 ## Installation
 ```pip install EXOSpy==2.3 ```
 
-Requires: NumPy, SciPy, Scikit-learn
+Requires: NumPy, SciPy, Scikit-learn.
 
 ## Example Notebooks
 
@@ -20,3 +20,5 @@ Example4.ipynb : Simulation of wide FOV instrument
 ## Readthedocs Website
 
 [https://exospy.readthedocs.io/en/latest/](https://exospy.readthedocs.io/en/latest/)
+
+
