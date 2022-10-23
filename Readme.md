@@ -1,5 +1,7 @@
 # EXOSpy is a open-source python-based library to investigate the terrestrial exosphere and its FUV emission.
 
+[![DOI](https://zenodo.org/badge/525983269.svg)](https://zenodo.org/badge/latestdoi/525983269)
+
 GitHub/Zenodo repository of the EXOSpy python library. It contains the source code and examples to use the library.
 
 ## Installation
@@ -10,8 +12,10 @@ Requires: NumPy, SciPy, Scikit-learn
 ## Example Notebooks
 
 There are four (4) notebooks with examples of how to use the EXOSpy library. The notebooks have been tested in Jupyter using python 3.5 
-Example
-
+Example1.ipynb : Plotting H density profiles
+Example2.ipynb : Simulation of TWINS/LAD observations
+Example3.ipynb : Simulation of TIMED/GUVI observations
+Example4.ipynb : Simulation of wide FOV instrument
 
 ## Readthedocs Website
 
