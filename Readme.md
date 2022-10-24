@@ -12,10 +12,10 @@ Requires: NumPy, SciPy, Scikit-learn.
 ## Example Notebooks
 
 There are four (4) notebooks with examples of how to use the EXOSpy library. The notebooks have been tested in Jupyter using python 3.5 
-Example1.ipynb : Plotting H density profiles
-Example2.ipynb : Simulation of TWINS/LAD observations
-Example3.ipynb : Simulation of TIMED/GUVI observations
-Example4.ipynb : Simulation of wide FOV instrument
+* Example1.ipynb : Plotting H density profiles
+* Example2.ipynb : Simulation of TWINS/LAD observations
+* Example3.ipynb : Simulation of TIMED/GUVI observations
+* Example4.ipynb : Simulation of wide FOV instrument
 
 ## Readthedocs Website
 
