@@ -1,6 +1,6 @@
 # EXOSpy is a open-source python-based library to investigate the terrestrial exosphere and its FUV emission.
 
-[![DOI](https://zenodo.org/badge/525983269.svg)](https://zenodo.org/badge/latestdoi/525983269)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7245359.svg)](https://doi.org/10.5281/zenodo.7245359)
 
 GitHub/Zenodo repository of the EXOSpy python library. It contains the source code and examples to use the library.
 
