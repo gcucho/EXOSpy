@@ -921,7 +921,7 @@ def generateIntensityOpticallyThin(irradiance,r_los,r_pos,model,dl = 0.1,maxRAD 
         #print(radius)
         break
       # Calculate intensity
-      intensity = intensity + (pf*g_factor/10.0**6)*get_density(model,radius,colat*np.pi/180,phi*np.pi/180)*dl*(6371*10**5)
+      intensity = intensity + (pf*g_factor/10.0**6)*get_density(model,r,colat*np.pi/180,phi*np.pi/180)*dl*(6371*10**5)
       # Update the current position
       current_pos = current_pos + dl*r_los[i,:] #in RE
 
