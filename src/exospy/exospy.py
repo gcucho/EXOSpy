@@ -101,47 +101,48 @@ def get_density(model, radius, theta, phi):
     Backward-compatible wrapper.
 
     Inputs come as 1x1 arrays:
-      radius in Re
-      theta in radians BUT representing latitude (because tvals are -90..90)
-      phi in radians (longitude)
+      radius : Re
+      theta  : colatitude in radians (0..pi)   <-- your exosgrid.tvals are 0..180 deg
+      phi    : longitude in radians (0..2pi)
 
-    Converts latitude->colatitude and calls the new 6-model density API.
-    Returns scalar float.
+    Returns scalar float (cm^-3).
     """
     m = str(model).lower().strip()
 
     # unwrap 1x1 arrays
     r_re  = float(np.asarray(radius).ravel()[0])
-    lat   = float(np.asarray(theta).ravel()[0])   # latitude (rad)
+    colat = float(np.asarray(theta).ravel()[0])   # already colatitude (rad)
     lon   = float(np.asarray(phi).ravel()[0])     # longitude (rad)
 
-    # latitude -> colatitude
-    colat = (0.5*np.pi) - lat
-
-    # Normalize model name (optional but recommended)
+    # normalize model name (optional but robust)
     model_map = {
         "bailey": "bailey_2008",
         "bailey2008": "bailey_2008",
         "bailey_2008": "bailey_2008",
+
         "zoennchen2015_min": "zoennchen_2015_min",
         "zoennchen_2015_min": "zoennchen_2015_min",
         "z2015_min": "zoennchen_2015_min",
+
         "zoennchen2015_max": "zoennchen_2015_max",
         "zoennchen_2015_max": "zoennchen_2015_max",
         "z2015_max": "zoennchen_2015_max",
+
         "zoennchen2024_2008": "zoennchen_2024_2008",
         "zoennchen_2024_2008": "zoennchen_2024_2008",
         "2008": "zoennchen_2024_2008",
+
         "zoennchen2024_2013": "zoennchen_2024_2013",
         "zoennchen_2024_2013": "zoennchen_2024_2013",
         "2013": "zoennchen_2024_2013",
+
         "zoennchen2024_2015": "zoennchen_2024_2015",
         "zoennchen_2024_2015": "zoennchen_2024_2015",
         "2015": "zoennchen_2024_2015",
     }
     model_name = model_map.get(m, m)
 
-    # Option A: call dispatcher (recommended)
+    # Call your new 6-model dispatcher (recommended)
     n = h_density(
         model_name,
         r=r_re,
@@ -150,7 +151,6 @@ def get_density(model, radius, theta, phi):
         degrees=False,
         r_units="Re"
     )
-
     return float(np.asarray(n))
 #def get_density(model,radius,theta,phi):
 #  # Verifying they are column vectors
