@@ -9,6 +9,35 @@ from tqdm import tqdm
 from scipy.integrate import quad
 from scipy import interpolate
 
+# --- optional tiny cache to avoid repeated dict lookup in big loops ---
+_LAST_MODEL_IN  = None
+_LAST_MODEL_OUT = None
+
+_MODEL_MAP = {
+    "bailey": "bailey_2008",
+    "bailey2008": "bailey_2008",
+    "bailey_2008": "bailey_2008",
+
+    "zoennchen2015_min": "zoennchen_2015_min",
+    "zoennchen_2015_min": "zoennchen_2015_min",
+    "z2015_min": "zoennchen_2015_min",
+
+    "zoennchen2015_max": "zoennchen_2015_max",
+    "zoennchen_2015_max": "zoennchen_2015_max",
+    "z2015_max": "zoennchen_2015_max",
+
+    "zoennchen2024_2008": "zoennchen_2024_2008",
+    "zoennchen_2024_2008": "zoennchen_2024_2008",
+    "2008": "zoennchen_2024_2008",
+
+    "zoennchen2024_2013": "zoennchen_2024_2013",
+    "zoennchen_2024_2013": "zoennchen_2024_2013",
+    "2013": "zoennchen_2024_2013",
+
+    "zoennchen2024_2015": "zoennchen_2024_2015",
+    "zoennchen_2024_2015": "zoennchen_2024_2015",
+    "2015": "zoennchen_2024_2015",
+}
 
 class exosgrid:
   def __init__(self):
@@ -96,53 +125,42 @@ def spherical_harmonics(theta):
   return Y_lm
 
 #-------------------------------------------------------------------------------
+def _to_float(x):
+    """Fast unwrap: works for scalar, 0-d array, 1x1 array, list, etc."""
+    a = np.asarray(x)
+    # a.flat[0] is safe and usually faster than ravel()[0]
+    return float(a.flat[0])
+
 def get_density(model, radius, theta, phi):
     """
-    Backward-compatible wrapper.
+    Compatible with BOTH:
+      - legacy calls using 1x1 arrays
+      - fast calls using scalar floats
 
-    Inputs come as 1x1 arrays:
-      radius : Re
-      theta  : colatitude in radians (0..pi)   <-- your exosgrid.tvals are 0..180 deg
-      phi    : longitude in radians (0..2pi)
-
-    Returns scalar float (cm^-3).
+    Conventions:
+      radius: Re
+      theta : colatitude [rad] (0..pi)
+      phi   : longitude  [rad] (0..2pi)
+    Returns:
+      float density [cm^-3]
     """
+    global _LAST_MODEL_IN, _LAST_MODEL_OUT
+
+    # unwrap scalars/arrays
+    r_re  = _to_float(radius)
+    colat = _to_float(theta)
+    lon   = _to_float(phi)
+
+    # normalize model name with a tiny cache (big win in voxel loops)
     m = str(model).lower().strip()
+    if m == _LAST_MODEL_IN:
+        model_name = _LAST_MODEL_OUT
+    else:
+        model_name = _MODEL_MAP.get(m, m)
+        _LAST_MODEL_IN  = m
+        _LAST_MODEL_OUT = model_name
 
-    # unwrap 1x1 arrays
-    r_re  = float(np.asarray(radius).ravel()[0])
-    colat = float(np.asarray(theta).ravel()[0])   # already colatitude (rad)
-    lon   = float(np.asarray(phi).ravel()[0])     # longitude (rad)
-
-    # normalize model name (optional but robust)
-    model_map = {
-        "bailey": "bailey_2008",
-        "bailey2008": "bailey_2008",
-        "bailey_2008": "bailey_2008",
-
-        "zoennchen2015_min": "zoennchen_2015_min",
-        "zoennchen_2015_min": "zoennchen_2015_min",
-        "z2015_min": "zoennchen_2015_min",
-
-        "zoennchen2015_max": "zoennchen_2015_max",
-        "zoennchen_2015_max": "zoennchen_2015_max",
-        "z2015_max": "zoennchen_2015_max",
-
-        "zoennchen2024_2008": "zoennchen_2024_2008",
-        "zoennchen_2024_2008": "zoennchen_2024_2008",
-        "2008": "zoennchen_2024_2008",
-
-        "zoennchen2024_2013": "zoennchen_2024_2013",
-        "zoennchen_2024_2013": "zoennchen_2024_2013",
-        "2013": "zoennchen_2024_2013",
-
-        "zoennchen2024_2015": "zoennchen_2024_2015",
-        "zoennchen_2024_2015": "zoennchen_2024_2015",
-        "2015": "zoennchen_2024_2015",
-    }
-    model_name = model_map.get(m, m)
-
-    # Call your new 6-model dispatcher (recommended)
+    # call dispatcher
     n = h_density(
         model_name,
         r=r_re,
@@ -152,6 +170,7 @@ def get_density(model, radius, theta, phi):
         r_units="Re"
     )
     return float(np.asarray(n))
+  
 #def get_density(model,radius,theta,phi):
 #  # Verifying they are column vectors
 #  #if theta.shape[1] > theta.shape[0]:
