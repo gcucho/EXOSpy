@@ -849,24 +849,44 @@ def generateObservationMatrix(los,pos,exosgrid):
   return ObsMatrix_t,AngleI_t
 
 #-------------------------------------------------------------------------------
-def generate3DHmodel(model,exosgrid):
-  H = np.zeros((int(exosgrid.numvoxels),1))
-  theta = np.array([[0.0]])
-  rad = np.array([[0.0]])
-  phi = np.array([[0.0]])
+#def generate3DHmodel(model,exosgrid):
+#  H = np.zeros((int(exosgrid.numvoxels),1))
+#  theta = np.array([[0.0]])
+#  rad = np.array([[0.0]])
+#  phi = np.array([[0.0]])
 
-  for t_id in range(int(exosgrid.numT)):
-    theta[0,0] = exosgrid.tvals[t_id]+exosgrid.tstep/2
-    theta[0,0] = theta[0,0]*np.pi/180
-    for p_id in range(int(exosgrid.numP)):
-      phi[0,0] = exosgrid.pvals[p_id]+exosgrid.pstep/2
-      phi[0,0] = phi[0,0]*np.pi/180
-      for r_id in range(int(exosgrid.numR)):
-        rad[0,0] = exosgrid.rvals[r_id]+exosgrid.rstep/2
-        H[int(r_id+p_id*exosgrid.numR+t_id*exosgrid.numR*exosgrid.numP),0] = get_density(model,rad,theta,phi)
-        #print(rad,theta,phi)
+#  for t_id in range(int(exosgrid.numT)):
+#    theta[0,0] = exosgrid.tvals[t_id]+exosgrid.tstep/2
+#    theta[0,0] = theta[0,0]*np.pi/180
+#    for p_id in range(int(exosgrid.numP)):
+#      phi[0,0] = exosgrid.pvals[p_id]+exosgrid.pstep/2
+#      phi[0,0] = phi[0,0]*np.pi/180
+#      for r_id in range(int(exosgrid.numR)):
+#        rad[0,0] = exosgrid.rvals[r_id]+exosgrid.rstep/2
+#        H[int(r_id+p_id*exosgrid.numR+t_id*exosgrid.numR*exosgrid.numP),0] = get_density(model,rad,theta,phi)
+#        #print(rad,theta,phi)
 
-  return H
+#  return H
+def generate3DHmodel(model, exosgrid):
+    H = np.zeros((int(exosgrid.numvoxels), 1), dtype=float)
+    theta = np.array([[0.0]])
+    rad   = np.array([[0.0]])
+    phi   = np.array([[0.0]])
+
+    for t_id in range(int(exosgrid.numT)):
+        theta[0,0] = exosgrid.tvals[t_id] + exosgrid.tstep/2
+        theta[0,0] = theta[0,0] * np.pi/180.0
+
+        for p_id in range(int(exosgrid.numP)):
+            phi[0,0] = exosgrid.pvals[p_id] + exosgrid.pstep/2
+            phi[0,0] = phi[0,0] * np.pi/180.0
+
+            for r_id in range(int(exosgrid.numR)):
+                rad[0,0] = exosgrid.rvals[r_id] + exosgrid.rstep/2
+
+                idx = int(r_id + p_id*exosgrid.numR + t_id*exosgrid.numR*exosgrid.numP)
+                H[idx,0] = get_density(model, rad, theta, phi)
+
 
 #-------------------------------------------------------------------------------
 def getHolstein(tau):
