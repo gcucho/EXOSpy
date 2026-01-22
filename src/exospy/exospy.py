@@ -1500,7 +1500,23 @@ def h_density_zoennchen2024_2015(r, theta, phi, *, degrees=False, r_units="Re", 
 #      ax.set_ylabel('Y [RE]')
       
 #    return toPlot, H
+def _centers_from_vals(vals, step_deg, n_expected):
+    """
+    Return cell centers of length n_expected.
 
+    If vals has length n_expected+1 -> treat as edges and return midpoints.
+    If vals has length n_expected   -> treat as lower edges and add step/2.
+    Otherwise fallback to linspace centers.
+    """
+    v = np.asarray(vals, dtype=float)
+
+    if v.size == n_expected + 1:
+        return 0.5*(v[:-1] + v[1:])
+    if v.size == n_expected:
+        return v + 0.5*step_deg
+
+    return np.linspace(v.min() + 0.5*step_deg, v.max() - 0.5*step_deg, n_expected)
+    
 def _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=1.0, angle_deg=180.0,
                           edgecolor='k', lw=1.0, zorder=10):
     """
@@ -1555,68 +1571,76 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
     """
     Plot 3D H density model slices.
 
-    Inputs
-    ------
-    model : str
-    exosgrid : exosgrid instance (expects rvals in Re, pvals in deg, tvals in deg COLATITUDE 0..180)
-    plane : 'map' | 'meridional' | 'equatorial'
-    arg :
-        - if plane='map'       : radius in Re within [rmin, rmax]
-        - if plane='meridional': phi (deg) within [0, 360]
-        - if plane='equatorial': unused (set 0)
-    plotb : bool
-        If True, makes the plot.
-    map_log10 : bool
-        If True, plot log10 in map view; otherwise linear.
-    shadow_radius_re : float
-        Earth disk radius in Re
-    shadow_angle_equatorial_deg : float
-        Orientation of black half in equatorial view (deg CCW from +X)
-    shadow_angle_meridional_deg : float
-        Orientation of black half in meridional view (deg CCW from +X)
+    Assumptions about exosgrid:
+      - tvals are COLATITUDE in degrees, spanning 0..180 (often as edges => length numT+1)
+      - pvals are LONGITUDE in degrees, spanning 0..360 (often as edges => length numP+1)
+      - rvals are radius in Re (often as edges => length numR+1 or centers => length numR)
+      - numT/numP/numR are the number of CELLS (not edges)
 
-    Returns
-    -------
-    toPlot : 2D array
-    H3     : 3D array shaped (numT, numP, numR)
+    plane:
+      - 'map'       : Mollweide projection at radius arg (Re)
+      - 'meridional': X-Z slice at phi=arg (deg)
+      - 'equatorial': X-Y slice at equator (theta index numT//2); arg unused
     """
-    # compute full 3D cube
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # ---- small local helper: build cell centers consistent with expected size ----
+    def _centers_from_vals(vals, step_deg, n_expected):
+        v = np.asarray(vals, dtype=float)
+        if v.size == n_expected + 1:        # edges -> midpoints
+            return 0.5 * (v[:-1] + v[1:])
+        if v.size == n_expected:            # lower edges -> centers
+            return v + 0.5 * step_deg
+        # fallback
+        return np.linspace(v.min() + 0.5 * step_deg, v.max() - 0.5 * step_deg, n_expected)
+
+    # ---- compute full 3D cube ----
     H1 = generate3DHmodel(model, exosgrid)
     if H1 is None:
-        raise ValueError("generate3DHmodel returned None. Check that generate3DHmodel ends with 'return H'.")
+        print("generate3DHmodel returned None. Check that generate3DHmodel ends with 'return H'.")
+        return -1
 
-    H3 = np.reshape(H1, (int(exosgrid.numT), int(exosgrid.numP), int(exosgrid.numR)))
+    numT = int(exosgrid.numT)
+    numP = int(exosgrid.numP)
+    numR = int(exosgrid.numR)
+    H3 = np.reshape(H1, (numT, numP, numR))
 
-    # ---------- MAP (Mollweide) ----------
+    # ---------------- MAP (Mollweide) ----------------
     if plane == 'map':
         if (arg < exosgrid.rmin) or (arg > exosgrid.rmax):
-            raise ValueError("Radius outside valid limits [rmin, rmax].")
+            print("Radius outside valid limits [rmin, rmax].")
+            return -1
 
-        ridx = int(np.argmin(np.abs(np.asarray(exosgrid.rvals) - arg)))
-        toPlot = H3[:, :, ridx]  # (T,P)
+        ridx = int(np.argmin(np.abs(np.asarray(exosgrid.rvals, dtype=float) - float(arg))))
+        toPlot = H3[:, :, ridx]  # (numT, numP)
 
         if plotb:
-            # exosgrid.tvals are COLATITUDE degrees [0,180]; convert to latitude degrees [-90,90]
-            colat_deg = np.asarray(exosgrid.tvals, dtype=float) + exosgrid.tstep/2.0
-            lat_deg = 90.0 - colat_deg
+            # Build theta/phi centers consistent with toPlot shape
+            colat_deg_c = _centers_from_vals(exosgrid.tvals, exosgrid.tstep, numT)  # len=numT
+            lon_deg_c   = _centers_from_vals(exosgrid.pvals, exosgrid.pstep, numP)  # len=numP
 
-            # avoid exact poles
+            # colat -> latitude
+            lat_deg_c = 90.0 - colat_deg_c
+
+            # avoid exact poles for numeric stability
             eps = 1e-6
-            lat_deg = np.clip(lat_deg, -90.0 + eps, 90.0 - eps)
+            lat_deg_c = np.clip(lat_deg_c, -90.0 + eps, 90.0 - eps)
 
-            lon_deg = np.asarray(exosgrid.pvals, dtype=float) + exosgrid.pstep/2.0  # [0,360]
-            lon_deg = (lon_deg + 180.0) % 360.0 - 180.0  # -> [-180, 180]
+            # Mollweide wants lon in [-180, 180]
+            lon_deg_wrapped = (lon_deg_c + 180.0) % 360.0 - 180.0
 
-            lat = np.deg2rad(lat_deg)
-            lon = np.deg2rad(lon_deg)
+            lat = np.deg2rad(lat_deg_c)
+            lon = np.deg2rad(lon_deg_wrapped)
 
-            Lon, Lat = np.meshgrid(lon, lat)
-            X, Y = _mollweide_forward(Lon, Lat)
+            Lon, Lat = np.meshgrid(lon, lat)           # (numT, numP)
+            X, Y = _mollweide_forward(Lon, Lat)        # (numT, numP)
 
             Z = np.log10(toPlot) if map_log10 else toPlot
 
-            # mask any non-finite points
-            bad = ~np.isfinite(X) | ~np.isfinite(Y) | ~np.isfinite(Z)
+            # mask any non-finite points (X/Y/Z must all match shape)
+            bad = (~np.isfinite(X)) | (~np.isfinite(Y)) | (~np.isfinite(Z))
             if np.any(bad):
                 X = np.ma.array(X, mask=bad)
                 Y = np.ma.array(Y, mask=bad)
@@ -1624,16 +1648,15 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
 
             fig, ax = plt.subplots(figsize=(10, 6))
             im = ax.pcolormesh(X, Y, Z, cmap='inferno', shading='nearest', rasterized=True)
-
             cb = fig.colorbar(im, fraction=0.03, pad=0.04)
             cb.set_label('log10(H density [1/cc])' if map_log10 else 'H density [1/cc]', fontsize=13)
 
             ax.set_aspect('equal', adjustable='box')
             ax.set_xlabel('Longitude')
             ax.set_ylabel('Latitude')
-            ax.set_title(f"Mollweide map at r={float(exosgrid.rvals[ridx]):.2f} RE")
+            ax.set_title(f"Mollweide map at r={float(arg):.2f} RE")
 
-            # tick labels in degrees (approximate positions)
+            # degree-like ticks (approx)
             lon_ticks_deg = np.array([-150, -90, -30, 30, 90, 150])
             lon_ticks = (2.0*np.sqrt(2.0)/np.pi) * np.deg2rad(lon_ticks_deg)
             ax.set_xticks(lon_ticks)
@@ -1646,20 +1669,22 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
 
         return toPlot, H3
 
-    # ---------- MERIDIONAL (X-Z) ----------
+    # ---------------- MERIDIONAL (X-Z) ----------------
     if plane == 'meridional':
         if (arg < 0) or (arg > 360):
-            raise ValueError("Azimuthal angle must be within [0, 360] deg.")
+            print("Azimuthal angle must be within [0, 360] deg.")
+            return -1
 
-        pidx = int(np.argmin(np.abs(np.asarray(exosgrid.pvals) - arg)))
-        toPlot = H3[:, pidx, :]  # (T,R)
+        pidx = int(np.argmin(np.abs(np.asarray(exosgrid.pvals, dtype=float) - float(arg))))
+        toPlot = H3[:, pidx, :]  # (numT, numR)
 
-        r = np.linspace(exosgrid.rmin, exosgrid.rmax, int(exosgrid.numR))
-        # theta is COLATITUDE (0..pi). For X-Z plane we want latitude-like angle: lat = pi/2 - colat
-        colat = np.deg2rad(np.linspace(exosgrid.tmin, exosgrid.tmax, int(exosgrid.numT)))
-        lat = (0.5*np.pi) - colat
+        # Use cell centers for a consistent geometry
+        r_c = _centers_from_vals(exosgrid.rvals, exosgrid.rstep, numR)
+        colat_deg_c = _centers_from_vals(exosgrid.tvals, exosgrid.tstep, numT)
+        colat = np.deg2rad(colat_deg_c)
+        lat = 0.5*np.pi - colat
 
-        R, LAT = np.meshgrid(r, lat)
+        R, LAT = np.meshgrid(r_c, lat)
         X1 = R*np.cos(LAT)
         X2 = R*np.sin(LAT)
 
@@ -1671,24 +1696,29 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
             cb.set_label('log10(H density [1/cc])', fontsize=13)
 
             ax.axis('equal')
-            ax.set_xlim(0, 8)
-            ax.set_ylim(-8, 8)
+            ax.set_xlim(0, exosgrid.rmax)
+            ax.set_ylim(-exosgrid.rmax, exosgrid.rmax)
             ax.set_xlabel('X [RE]')
             ax.set_ylabel('Z [RE]')
 
-            _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
-                                  angle_deg=shadow_angle_meridional_deg)
+            # Shadow Earth (requires _add_half_shadow_disk defined elsewhere)
+            try:
+                _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
+                                      angle_deg=shadow_angle_meridional_deg)
+            except NameError:
+                pass
 
         return toPlot, H3
 
-    # ---------- EQUATORIAL (X-Y) ----------
+    # ---------------- EQUATORIAL (X-Y) ----------------
     if plane == 'equatorial':
-        toPlot = H3[int(exosgrid.numT/2), :, :]  # (P,R)
+        toPlot = H3[numT // 2, :, :]  # (numP, numR)
 
-        r = np.linspace(exosgrid.rmin, exosgrid.rmax, int(exosgrid.numR))
-        ang = np.deg2rad(np.linspace(0, 360, int(exosgrid.numP), endpoint=False))
-        R, ANG = np.meshgrid(r, ang)
+        r_c = _centers_from_vals(exosgrid.rvals, exosgrid.rstep, numR)
+        lon_deg_c = _centers_from_vals(exosgrid.pvals, exosgrid.pstep, numP)
+        ang = np.deg2rad(lon_deg_c)
 
+        R, ANG = np.meshgrid(r_c, ang)
         X1 = R*np.cos(ANG)
         X2 = R*np.sin(ANG)
 
@@ -1700,17 +1730,22 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
             cb.set_label('log10(H density [1/cc])', fontsize=13)
 
             ax.axis('equal')
-            ax.set_xlim(-8, 8)
-            ax.set_ylim(-8, 8)
+            ax.set_xlim(-exosgrid.rmax, exosgrid.rmax)
+            ax.set_ylim(-exosgrid.rmax, exosgrid.rmax)
             ax.set_xlabel('X [RE]')
             ax.set_ylabel('Y [RE]')
 
-            _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
-                                  angle_deg=shadow_angle_equatorial_deg)
+            try:
+                _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
+                                      angle_deg=shadow_angle_equatorial_deg)
+            except NameError:
+                pass
 
         return toPlot, H3
 
-    raise ValueError("plane must be 'map', 'meridional', or 'equatorial'")
+    print("Error: plane must be 'map', 'meridional', or 'equatorial'")
+    return -1
+
 
 #-------------------------------------------------------------------------------
 def draw1DHmodel(model, minrad = 3, maxrad=10, radstep = 0.1,plotb = False):
