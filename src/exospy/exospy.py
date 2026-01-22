@@ -1617,26 +1617,25 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
         toPlot = H3[:, :, ridx]  # (numT, numP)
 
         if plotb:
-            # Build theta/phi centers consistent with toPlot shape
-            colat_deg_c = _centers_from_vals(exosgrid.tvals, exosgrid.tstep, numT)  # len=numT
-            lon_deg_c   = _centers_from_vals(exosgrid.pvals, exosgrid.pstep, numP)  # len=numP
-
-            # colat -> latitude
+            colat_deg_c = _centers_from_vals(exosgrid.tvals, exosgrid.tstep, numT)
+            lon_deg_c   = _centers_from_vals(exosgrid.pvals, exosgrid.pstep, numP)
+            
             lat_deg_c = 90.0 - colat_deg_c
-
-            # avoid exact poles for numeric stability
             eps = 1e-6
             lat_deg_c = np.clip(lat_deg_c, -90.0 + eps, 90.0 - eps)
-
-            # Mollweide wants lon in [-180, 180]
+            
             lon_deg_wrapped = (lon_deg_c + 180.0) % 360.0 - 180.0
-
+            
+            # >>> IMPORTANT: reorder longitudes AND toPlot together <<<
+            order = np.argsort(lon_deg_wrapped)
+            lon_deg_wrapped = lon_deg_wrapped[order]
+            toPlot = toPlot[:, order]
+            
             lat = np.deg2rad(lat_deg_c)
             lon = np.deg2rad(lon_deg_wrapped)
-
-            Lon, Lat = np.meshgrid(lon, lat)           # (numT, numP)
-            X, Y = _mollweide_forward(Lon, Lat)        # (numT, numP)
-
+            
+            Lon, Lat = np.meshgrid(lon, lat)
+            X, Y = _mollweide_forward(Lon, Lat)
             Z = np.log10(toPlot) if map_log10 else toPlot
 
             # mask any non-finite points (X/Y/Z must all match shape)
