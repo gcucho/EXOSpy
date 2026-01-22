@@ -8,6 +8,7 @@ from scipy.sparse import csr_matrix
 from tqdm import tqdm
 from scipy.integrate import quad
 from scipy import interpolate
+from matplotlib.patches import Circle, Wedge
 
 # --- optional tiny cache to avoid repeated dict lookup in big loops ---
 _LAST_MODEL_IN  = None
