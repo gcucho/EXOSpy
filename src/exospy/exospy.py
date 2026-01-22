@@ -1521,6 +1521,7 @@ def _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=1.0, angle_deg=0.0,
     # Wedge angles are in degrees, CCW from +x.
     # We'll fill the half centered on angle_deg (i.e., [angle-90, angle+90] is a half-plane),
     # but for a half-disk we use a 180-degree span.
+    angle_deg = angle_deg + 180.0  # flip
     th1 = angle_deg - 90.0
     th2 = angle_deg + 90.0
     shadow = Wedge((x0, y0), r=radius, theta1=th1, theta2=th2, facecolor='k', edgecolor='none', zorder=zorder-1)
