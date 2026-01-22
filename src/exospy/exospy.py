@@ -924,24 +924,28 @@ def generateObservationMatrix(los,pos,exosgrid):
 
 #  return H
 def generate3DHmodel(model, exosgrid):
+    numT = int(exosgrid.numT)
+    numP = int(exosgrid.numP)
+    numR = int(exosgrid.numR)
+
     H = np.zeros((int(exosgrid.numvoxels), 1), dtype=float)
-    theta = np.array([[0.0]])
-    rad   = np.array([[0.0]])
-    phi   = np.array([[0.0]])
 
-    for t_id in range(int(exosgrid.numT)):
-        theta[0,0] = exosgrid.tvals[t_id] + exosgrid.tstep/2
-        theta[0,0] = theta[0,0] * np.pi/180.0
+    # Precompute centers
+    thetas = np.deg2rad(np.asarray(exosgrid.tvals, dtype=float) + exosgrid.tstep/2.0)
+    phis   = np.deg2rad(np.asarray(exosgrid.pvals, dtype=float) + exosgrid.pstep/2.0)
+    rads   = np.asarray(exosgrid.rvals, dtype=float) + exosgrid.rstep/2.0
 
-        for p_id in range(int(exosgrid.numP)):
-            phi[0,0] = exosgrid.pvals[p_id] + exosgrid.pstep/2
-            phi[0,0] = phi[0,0] * np.pi/180.0
+    for t_id in range(numT):
+        th = float(thetas[t_id])
+        base_t = t_id * numR * numP
+        for p_id in range(numP):
+            ph = float(phis[p_id])
+            base_tp = base_t + p_id * numR
+            for r_id in range(numR):
+                rr = float(rads[r_id])
+                idx = base_tp + r_id
+                H[idx, 0] = get_density(model, rr, th, ph)  # get_density debe aceptar escalares
 
-            for r_id in range(int(exosgrid.numR)):
-                rad[0,0] = exosgrid.rvals[r_id] + exosgrid.rstep/2
-
-                idx = int(r_id + p_id*exosgrid.numR + t_id*exosgrid.numR*exosgrid.numP)
-                H[idx,0] = get_density(model, rad, theta, phi)
     return H
 
 
