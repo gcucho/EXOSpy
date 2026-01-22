@@ -933,6 +933,402 @@ def generateIntensityOpticallyThin(irradiance,r_los,r_pos,model,dl = 0.1,maxRAD 
 #-------------------------------------------------------------------------------
 # NEW CODE TO HANDLE OF ADDITIONAL MODELS 
 
+# ----------------------------
+# Constants / helpers
+# ----------------------------
+RE_KM = 6371.0
+
+def _to_numpy(x):
+    return np.asarray(x, dtype=float)
+
+def _deg2rad_if_needed(angle, degrees):
+    a = _to_numpy(angle)
+    return np.deg2rad(a) if degrees else a
+
+def _safe_sqrt(x):
+    return np.sqrt(np.clip(x, 0.0, None))
+
+def _factorial(n):
+    return math.factorial(int(n))
+
+def _norm_lm(l, m):
+    # Real SH "Legendre polynomial" normalization (common in geophysics):
+    # Y_lm(theta) = N_lm * P_l^m(cos(theta)), with N_lm = sqrt((2l+1)/(4π) * (l-m)!/(l+m)!)
+    return math.sqrt((2*l + 1)/(4*math.pi) * _factorial(l-m)/_factorial(l+m))
+
+def _assoc_legendre_lm(l, m, x):
+    """
+    Associated Legendre P_l^m(x) for l<=3 (hardcoded, stable, no scipy).
+    Uses the Condon-Shortley phase (-1)^m (included in formulas below).
+    x can be numpy array.
+    """
+    x = _to_numpy(x)
+    s = _safe_sqrt(1.0 - x*x)
+
+    if l == 0 and m == 0:
+        return np.ones_like(x)
+
+    if l == 1:
+        if m == 0:
+            return x
+        if m == 1:
+            return -s
+
+    if l == 2:
+        if m == 0:
+            return 0.5*(3.0*x*x - 1.0)
+        if m == 1:
+            return -3.0*x*s
+        if m == 2:
+            return 3.0*(1.0 - x*x)
+
+    if l == 3:
+        if m == 0:
+            return 0.5*(5.0*x**3 - 3.0*x)
+        if m == 1:
+            return -(3.0/2.0)*(5.0*x*x - 1.0)*s
+        if m == 2:
+            return 15.0*x*(1.0 - x*x)
+        if m == 3:
+            return -15.0*(s**3)
+
+    raise ValueError(f"assoc_legendre only implemented for l<=3, got l={l}, m={m}")
+
+def ylm_theta(l, m, theta):
+    """
+    Y_lm(theta) used by these SHR models (no phi dependence here).
+    theta is colatitude (0 at +Z/North).
+    """
+    theta = _to_numpy(theta)
+    x = np.cos(theta)
+    P = _assoc_legendre_lm(l, m, x)
+    return _norm_lm(l, m) * P
+
+def _shr_real(theta, phi, coeffs, lmax):
+    """
+    SHR = sqrt(4π) * Σ_{l=0..lmax} Σ_{m=0..l} [A_lm cos(mφ) + B_lm sin(mφ)] Y_lm(θ)
+    coeffs dict must provide A[(l,m)] and B[(l,m)] (missing -> 0), plus A00=1 typically.
+    """
+    theta = _to_numpy(theta)
+    phi   = _to_numpy(phi)
+
+    out = np.zeros(np.broadcast(theta, phi).shape, dtype=float)
+    for l in range(lmax + 1):
+        for m in range(l + 1):
+            Y = ylm_theta(l, m, theta)
+            A = coeffs.get(("A", l, m), 0.0)
+            B = coeffs.get(("B", l, m), 0.0)
+            if m == 0:
+                out = out + A * Y
+            else:
+                out = out + (A*np.cos(m*phi) + B*np.sin(m*phi)) * Y
+    return math.sqrt(4.0*math.pi) * out
+
+# ----------------------------
+# Model coefficient builders
+# ----------------------------
+def _zoennchen2015_coeffs(which):
+    """
+    Zoennchen et al. (2015): lmax=2, A00=1, Alm & Blm = (const + const*ln(r)) * 1e-4 (except A00).
+    'which' in {'min', 'max'}
+    """
+    if which == "min":
+        # Table 1 (solar minimum 2008/2010) :contentReference[oaicite:7]{index=7}
+        c = 12264.1
+        k = 2.87646
+        a = { (1,0):(  938.00,  135.41),
+              (1,1):(   92.20,  198.16),
+              (2,0):( -385.26, -597.06),
+              (2,1):( 2042.26, -916.65),
+              (2,2):( -421.34, 1196.10) }
+        b = { (1,1):( 4870.41, -2632.88),
+              (2,1):(-2506.10,  1578.28),
+              (2,2):( 2783.95, -1331.32) }
+    elif which == "max":
+        # Table 2 (near-solar-maximum 2012) :contentReference[oaicite:8]{index=8}
+        c = 16840.9
+        k = 2.74640
+        a = { (1,0):( -921.29,   790.11),
+              (1,1):( 6763.12, -3088.94),
+              (2,0):( -494.96,  -405.36),
+              (2,1):( -284.02,    44.03),
+              (2,2):( -556.96,  1303.13) }
+        b = { (1,1):( 1289.94,  -788.54),
+              (2,1):( -753.84,   256.56),
+              (2,2):( 2029.43, -1084.30) }
+    else:
+        raise ValueError("Zoennchen2015 which must be 'min' or 'max'")
+
+    def coeffs_at_r(r_re):
+        r_re = _to_numpy(r_re)
+        lr = np.log(r_re)
+        coeffs = {("A",0,0): 1.0}
+        scale = 1e-4
+        # A terms
+        for (l,m),(aa,bb) in a.items():
+            coeffs[("A",l,m)] = (aa + bb*lr)*scale
+        # B terms
+        for (l,m),(pp,qq) in b.items():
+            coeffs[("B",l,m)] = (pp + qq*lr)*scale
+        # missing terms assumed 0
+        return coeffs
+
+    meta = {"type":"zoennchen2015", "which":which, "c":c, "k":k, "lmax":2}
+    return meta, coeffs_at_r
+
+def _zoennchen2024_coeffs(which):
+    """
+    Zoennchen et al. (2024): lmax=3, Eq(5) includes d^(1/r) term. :contentReference[oaicite:9]{index=9}
+    Coeffs from Table 3 for 2008/2013/2015. :contentReference[oaicite:10]{index=10} :contentReference[oaicite:11]{index=11} :contentReference[oaicite:12]{index=12}
+    """
+    if which == "2008":
+        c,k,d = 4400.47602, 2.35863972, 5.13191135
+        A = {
+            (1,0):( 0.10378384,      -0.0549490022),
+            (1,1):( 0.0209286265,     0.00027287255),
+            (2,0):( 0.0973649071,    -0.119977357),
+            (2,1):(-0.145366729,      0.0937117025),
+            (2,2):(-0.277012528,      0.276749422),
+            (3,0):(-1.07414979e-5,   -0.0110100711),
+            (3,1):( 0.000107379013,  -1.78917719e-6),
+            (3,2):( 2.64592101e-5,    0.000878167056),
+            (3,3):(-0.189335716,      0.132502861),
+        }
+        B = {
+            (1,1):(-0.0106621543,     0.0221945739),
+            (2,1):(-0.0900472936,     0.0580710504),
+            (2,2):( 0.163972774,     -0.0873760161),
+            (3,1):(-0.0851136046,     0.0684112054),
+            (3,2):( 0.347028204,     -0.228867241),
+            (3,3):(-3.63528687e-6,   -0.00871796055),
+        }
+    elif which == "2013":
+        c,k,d = 8143.32369, 2.46136837, 1.91745002
+        A = {
+            (1,0):( 1.88713836e-7,   -0.0101115442),
+            (1,1):(-0.000372983798,  -3.72355169e-5),
+            (2,0):(-0.000925215858, -0.0134752631),
+            (2,1):(-0.0189771246,    0.0196004454),
+            (2,2):(-0.0851061204,    0.106488415),
+            (3,0):(-0.0162650162,    0.00690910979),
+            (3,1):( 0.0047678757,   -9.00328944e-6),
+            (3,2):(-9.76424742e-6,   0.00573736914),
+            (3,3):(-4.02268369e-6,   0.00194601785),
+        }
+        B = {
+            (1,1):(-0.0442302801,     0.0208651138),
+            (2,1):(-0.0649227416,     0.0324600394),
+            (2,2):(-0.000513397304,   6.85089551e-5),
+            (3,1):(-0.0907362653,     0.0656108159),
+            (3,2):( 1.56635585e-5,   -0.00832095984),
+            (3,3):( 0.000252872776,  -0.0067339901),
+        }
+    elif which == "2015":
+        c,k,d = 8022.87883, 2.46826669, 2.40919011
+        A = {
+            (1,0):(-0.00115599731,   -8.55009777e-5),
+            (1,1):(-0.0321731569,     6.44984436e-5),
+            (2,0):( 0.0528720519,    -0.0483273322),
+            (2,1):(-0.135265871,      0.0974773937),
+            (2,2):( 0.0640442767,    -3.19342462e-5),
+            (3,0):( 0.0511557829,    -0.0417547088),
+            (3,1):(-0.183336474,      0.134325125),
+            (3,2):( 0.014359638,     -8.82895819e-6),
+            (3,3):( 3.78566663e-6,   -0.0004674004),
+        }
+        B = {
+            (1,1):(-0.0169112053,    -0.0157071887),
+            (2,1):( 6.48856934e-6,    0.000228402417),
+            (2,2):(-0.0734408996,     0.0421809581),
+            (3,1):(-0.0071425359,     0.0151312125),
+            (3,2):(-1.10036313e-6,   -0.000117698068),
+            (3,3):(-2.41106162e-5,   -0.0088006464),
+        }
+    else:
+        raise ValueError("Zoennchen2024 which must be '2008', '2013', or '2015'")
+
+    def coeffs_at_r(r_re, r_limit=6.0):
+        # Freeze angular coefficients for r>6 Re (use r_eff for ln(r) in A/B),
+        # but radial N(r) uses the real r. :contentReference[oaicite:13]{index=13}
+        r_re = _to_numpy(r_re)
+        r_eff = np.minimum(r_re, r_limit)
+        lr = np.log(r_eff)
+
+        coeffs = {("A",0,0): 1.0}
+        for (l,m),(aa,bb) in A.items():
+            coeffs[("A",l,m)] = aa + bb*lr
+        for (l,m),(pp,qq) in B.items():
+            coeffs[("B",l,m)] = pp + qq*lr
+        # B10=B20=B30=0 in the table :contentReference[oaicite:14]{index=14}
+        coeffs[("B",1,0)] = 0.0
+        coeffs[("B",2,0)] = 0.0
+        coeffs[("B",3,0)] = 0.0
+        return coeffs
+
+    meta = {"type":"zoennchen2024", "which":which, "c":c, "k":k, "d":d, "lmax":3}
+    return meta, coeffs_at_r
+
+def _bailey2008_coeffs():
+    """
+    Bailey & Gruntman (TWINS 11-Jun-2008): coefficients table provided (r in km, n in cm^-3). :contentReference[oaicite:15]{index=15}
+    We use:
+      N(r_km) = p * r_km^k
+      A_lm(r_km) = a_lm + b_lm * r_km
+      B_lm(r_km) = c_lm + d_lm * r_km
+    with lmax=2, A00=1.
+    """
+    # Table values :contentReference[oaicite:16]{index=16}
+    p = 4.1118e13
+    k = -2.5446
+
+    A_lin = {
+        (1,0):(-4.8992e-2, -1.8720e-6),
+        (1,1):(-3.8248e-1,  9.0636e-6),
+        (2,0):( 1.5739e-1, -6.1959e-6),
+        (2,1):(-6.9198e-2,  4.5477e-6),
+        (2,2):(-1.0148e-1,  1.4873e-6),
+    }
+    B_lin = {
+        (1,1):(-4.8547e-2, -2.1587e-6),
+        (2,1):( 2.1922e-1, -7.0881e-6),
+        (2,2):(-8.8242e-2,  4.2384e-6),
+    }
+
+    def coeffs_at_r(r_km):
+        r_km = _to_numpy(r_km)
+        coeffs = {("A",0,0): 1.0}
+        for (l,m),(aa,bb) in A_lin.items():
+            coeffs[("A",l,m)] = aa + bb*r_km
+        for (l,m),(cc,dd) in B_lin.items():
+            coeffs[("B",l,m)] = cc + dd*r_km
+        return coeffs
+
+    meta = {"type":"bailey2008", "p":p, "k":k, "lmax":2}
+    return meta, coeffs_at_r
+
+# ----------------------------
+# Public API
+# ----------------------------
+def available_h_models():
+    return [
+        "bailey_2008",
+        "zoennchen_2015_min",
+        "zoennchen_2015_max",
+        "zoennchen_2024_2008",
+        "zoennchen_2024_2013",
+        "zoennchen_2024_2015",
+    ]
+
+def h_model_meta(model_name):
+    model_name = str(model_name).lower().strip()
+    if model_name == "bailey_2008":
+        meta, _ = _bailey2008_coeffs()
+        return meta
+    if model_name == "zoennchen_2015_min":
+        meta, _ = _zoennchen2015_coeffs("min")
+        return meta
+    if model_name == "zoennchen_2015_max":
+        meta, _ = _zoennchen2015_coeffs("max")
+        return meta
+    if model_name == "zoennchen_2024_2008":
+        meta, _ = _zoennchen2024_coeffs("2008")
+        return meta
+    if model_name == "zoennchen_2024_2013":
+        meta, _ = _zoennchen2024_coeffs("2013")
+        return meta
+    if model_name == "zoennchen_2024_2015":
+        meta, _ = _zoennchen2024_coeffs("2015")
+        return meta
+    raise ValueError(f"Unknown model_name='{model_name}'. Use available_h_models().")
+
+def h_density(model_name, r, theta, phi, *, degrees=False, r_units="Re", r_limit_zoennchen2024=6.0):
+    """
+    Compute nH for any (r, theta, phi).
+
+    Parameters
+    ----------
+    model_name : str
+        One of available_h_models()
+    r : float or array
+        Radius. If r_units="Re": in Earth radii. If "km": in km.
+    theta : float or array
+        Colatitude (0 at +Z / north pole).
+    phi : float or array
+        Longitude (radians by default). If degrees=True, theta & phi in degrees.
+    degrees : bool
+        If True, interprets theta & phi in degrees.
+    r_units : {"Re","km"}
+        Units for r input.
+    r_limit_zoennchen2024 : float
+        Freeze angular coefficients at r_eff=min(r, r_limit) for Zoennchen2024. :contentReference[oaicite:17]{index=17}
+
+    Returns
+    -------
+    nH : float or numpy array
+        Density in cm^-3.
+    """
+    model_name = str(model_name).lower().strip()
+    theta = _deg2rad_if_needed(theta, degrees)
+    phi   = _deg2rad_if_needed(phi, degrees)
+
+    r_in = _to_numpy(r)
+    if r_units.lower() == "re":
+        r_re = r_in
+        r_km = r_in * RE_KM
+    elif r_units.lower() == "km":
+        r_km = r_in
+        r_re = r_in / RE_KM
+    else:
+        raise ValueError("r_units must be 'Re' or 'km'")
+
+    if model_name == "bailey_2008":
+        meta, coeffs_at_r = _bailey2008_coeffs()
+        # Bailey uses r in km for N(r)=p*r^k :contentReference[oaicite:18]{index=18}
+        N = meta["p"] * (r_km ** meta["k"])
+        coeffs = coeffs_at_r(r_km)
+        SHR = _shr_real(theta, phi, coeffs, meta["lmax"])
+        return N * SHR
+
+    if model_name in ("zoennchen_2015_min", "zoennchen_2015_max"):
+        which = "min" if model_name.endswith("_min") else "max"
+        meta, coeffs_at_r = _zoennchen2015_coeffs(which)
+        N = meta["c"] * (r_re ** (-meta["k"]))
+        coeffs = coeffs_at_r(r_re)
+        SHR = _shr_real(theta, phi, coeffs, meta["lmax"])
+        return N * SHR
+
+    if model_name.startswith("zoennchen_2024_"):
+        which = model_name.split("_")[-1]  # 2008/2013/2015
+        meta, coeffs_at_r = _zoennchen2024_coeffs(which)
+        # Eq(5): c*r^{-k}*d^{1/r}*SHR  :contentReference[oaicite:19]{index=19}
+        N = meta["c"] * (r_re ** (-meta["k"])) * (meta["d"] ** (1.0 / r_re))
+        coeffs = coeffs_at_r(r_re, r_limit=r_limit_zoennchen2024)
+        SHR = _shr_real(theta, phi, coeffs, meta["lmax"])
+        return N * SHR
+
+    raise ValueError(f"Unknown model_name='{model_name}'. Use available_h_models().")
+
+# Convenience wrappers (optional)
+def h_density_bailey2008(r, theta, phi, *, degrees=False, r_units="Re"):
+    return h_density("bailey_2008", r, theta, phi, degrees=degrees, r_units=r_units)
+
+def h_density_zoennchen2015_min(r, theta, phi, *, degrees=False, r_units="Re"):
+    return h_density("zoennchen_2015_min", r, theta, phi, degrees=degrees, r_units=r_units)
+
+def h_density_zoennchen2015_max(r, theta, phi, *, degrees=False, r_units="Re"):
+    return h_density("zoennchen_2015_max", r, theta, phi, degrees=degrees, r_units=r_units)
+
+def h_density_zoennchen2024_2008(r, theta, phi, *, degrees=False, r_units="Re", r_limit=6.0):
+    return h_density("zoennchen_2024_2008", r, theta, phi, degrees=degrees, r_units=r_units, r_limit_zoennchen2024=r_limit)
+
+def h_density_zoennchen2024_2013(r, theta, phi, *, degrees=False, r_units="Re", r_limit=6.0):
+    return h_density("zoennchen_2024_2013", r, theta, phi, degrees=degrees, r_units=r_units, r_limit_zoennchen2024=r_limit)
+
+def h_density_zoennchen2024_2015(r, theta, phi, *, degrees=False, r_units="Re", r_limit=6.0):
+    return h_density("zoennchen_2024_2015", r, theta, phi, degrees=degrees, r_units=r_units, r_limit_zoennchen2024=r_limit)
+
+
+
 #-------------------------------------------------------------------------------
 #def draw3DHmodel(model,exosgrid,plane,arg,plotb):
 #  H = generate3DHmodel(model,exosgrid)
