@@ -942,7 +942,7 @@ def generate3DHmodel(model, exosgrid):
 
                 idx = int(r_id + p_id*exosgrid.numR + t_id*exosgrid.numR*exosgrid.numP)
                 H[idx,0] = get_density(model, rad, theta, phi)
-  return H
+      return H
 
 
 #-------------------------------------------------------------------------------
