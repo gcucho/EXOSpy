@@ -1501,51 +1501,43 @@ def h_density_zoennchen2024_2015(r, theta, phi, *, degrees=False, r_units="Re", 
       
 #    return toPlot, H
 
-def _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=1.0, angle_deg=0.0,
+def _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=1.0, angle_deg=180.0,
                           edgecolor='k', lw=1.0, zorder=10):
     """
     Draw an Earth disk with half in shadow (black half-disk).
-    angle_deg sets the shadow half orientation:
-      0   -> shadow on +X side
-      90  -> shadow on +Y side
-      180 -> shadow on -X side
-      -90 -> shadow on -Y side
+
+    angle_deg controls where the BLACK half is centered (degrees CCW from +X):
+      0   -> black on +X (right)
+      180 -> black on -X (left)  (often what you want if Sun is +X)
+      90  -> black on +Y
+     -90  -> black on -Y
     """
     x0, y0 = center
 
-    # Outline of Earth
-    circ = Circle((x0, y0), radius=radius, facecolor='none', edgecolor=edgecolor, lw=lw, zorder=zorder)
+    circ = Circle((x0, y0), radius=radius, facecolor='none',
+                  edgecolor=edgecolor, lw=lw, zorder=zorder)
     ax.add_patch(circ)
 
-    # Shadow half (a 180-degree wedge)
-    # Wedge angles are in degrees, CCW from +x.
-    # We'll fill the half centered on angle_deg (i.e., [angle-90, angle+90] is a half-plane),
-    # but for a half-disk we use a 180-degree span.
-    angle_deg = angle_deg + 180.0  # flip
     th1 = angle_deg - 90.0
     th2 = angle_deg + 90.0
-    shadow = Wedge((x0, y0), r=radius, theta1=th1, theta2=th2, facecolor='k', edgecolor='none', zorder=zorder-1)
+    shadow = Wedge((x0, y0), r=radius, theta1=th1, theta2=th2,
+                   facecolor='k', edgecolor='none', zorder=zorder-1)
     ax.add_patch(shadow)
 
 
 def _mollweide_forward(lon, lat):
     """
-    Mollweide projection forward transform.
-    Input:
-      lon, lat in radians (lon in [-pi, pi], lat in [-pi/2, pi/2])
-    Output:
-      x, y in projected coordinates (units of radians-ish; consistent)
+    Mollweide projection (forward).
+    lon, lat in radians; lon in [-pi, pi], lat in [-pi/2, pi/2]
+    returns x,y arrays
     """
-    # Solve for theta: 2θ + sin(2θ) = π sin(lat)
-    # Use Newton iterations; lat grid is modest so this is fine.
     lon = np.asarray(lon, dtype=float)
     lat = np.asarray(lat, dtype=float)
 
-    # initial guess
-    theta = lat.copy()
-
     rhs = np.pi * np.sin(lat)
-    for _ in range(10):
+    theta = lat.copy()  # initial guess
+
+    for _ in range(12):
         f = 2.0*theta + np.sin(2.0*theta) - rhs
         fp = 2.0 + 2.0*np.cos(2.0*theta)
         theta = theta - f / fp
@@ -1558,100 +1550,123 @@ def _mollweide_forward(lon, lat):
 def draw3DHmodel(model, exosgrid, plane, arg, plotb,
                  map_log10=False,
                  shadow_radius_re=1.0,
-                 shadow_angle_equatorial_deg=0.0,
+                 shadow_angle_equatorial_deg=180.0,
                  shadow_angle_meridional_deg=180.0):
     """
-    Changes vs your original:
-      - plane='map' now plots Mollweide projection.
-      - equatorial & meridional optionally add half-shadow Earth disk.
+    Plot 3D H density model slices.
 
-    Parameters
-    ----------
+    Inputs
+    ------
+    model : str
+    exosgrid : exosgrid instance (expects rvals in Re, pvals in deg, tvals in deg COLATITUDE 0..180)
+    plane : 'map' | 'meridional' | 'equatorial'
+    arg :
+        - if plane='map'       : radius in Re within [rmin, rmax]
+        - if plane='meridional': phi (deg) within [0, 360]
+        - if plane='equatorial': unused (set 0)
+    plotb : bool
+        If True, makes the plot.
     map_log10 : bool
-        If True, plot log10 in map view (like other planes).
+        If True, plot log10 in map view; otherwise linear.
     shadow_radius_re : float
-        Earth disk radius in RE (usually 1.0).
+        Earth disk radius in Re
     shadow_angle_equatorial_deg : float
-        Orientation of shadow half in equatorial plane.
+        Orientation of black half in equatorial view (deg CCW from +X)
     shadow_angle_meridional_deg : float
-        Orientation of shadow half in meridional plane.
-    """
+        Orientation of black half in meridional view (deg CCW from +X)
 
-    H = generate3DHmodel(model, exosgrid)
-    H = np.reshape(H, (int(exosgrid.numT), int(exosgrid.numP), int(exosgrid.numR)))
+    Returns
+    -------
+    toPlot : 2D array
+    H3     : 3D array shaped (numT, numP, numR)
+    """
+    # compute full 3D cube
+    H1 = generate3DHmodel(model, exosgrid)
+    if H1 is None:
+        raise ValueError("generate3DHmodel returned None. Check that generate3DHmodel ends with 'return H'.")
+
+    H3 = np.reshape(H1, (int(exosgrid.numT), int(exosgrid.numP), int(exosgrid.numR)))
 
     # ---------- MAP (Mollweide) ----------
     if plane == 'map':
         if (arg < exosgrid.rmin) or (arg > exosgrid.rmax):
-            print('Radius outside the valid limits')
-            return -1
+            raise ValueError("Radius outside valid limits [rmin, rmax].")
 
-        temp2 = int(np.argmin(np.abs(exosgrid.rvals - arg)))
-        toPlot = H[:, :, temp2]  # [theta_index, phi_index]
+        ridx = int(np.argmin(np.abs(np.asarray(exosgrid.rvals) - arg)))
+        toPlot = H3[:, :, ridx]  # (T,P)
 
         if plotb:
-            # Build lon/lat grids (assuming pvals: 0..360 deg, tvals: -90..90 deg)
-            # Your imshow extent suggests lon in [0,360], lat in [-90,90].
-            lon_deg = np.asarray(exosgrid.pvals, dtype=float)  # size numP
-            lat_deg = np.asarray(exosgrid.tvals, dtype=float)  # size numT (latitude)
+            # exosgrid.tvals are COLATITUDE degrees [0,180]; convert to latitude degrees [-90,90]
+            colat_deg = np.asarray(exosgrid.tvals, dtype=float) + exosgrid.tstep/2.0
+            lat_deg = 90.0 - colat_deg
 
-            # Convert to radians for Mollweide
-            # Mollweide uses lon in [-pi, pi], so shift from [0,360] to [-180,180]
-            lon_deg_wrapped = (lon_deg + 180.0) % 360.0 - 180.0
-            lon = np.deg2rad(lon_deg_wrapped)
+            # avoid exact poles
+            eps = 1e-6
+            lat_deg = np.clip(lat_deg, -90.0 + eps, 90.0 - eps)
+
+            lon_deg = np.asarray(exosgrid.pvals, dtype=float) + exosgrid.pstep/2.0  # [0,360]
+            lon_deg = (lon_deg + 180.0) % 360.0 - 180.0  # -> [-180, 180]
+
             lat = np.deg2rad(lat_deg)
+            lon = np.deg2rad(lon_deg)
 
-            # Mesh (lat x lon) to match toPlot shape [numT, numP]
             Lon, Lat = np.meshgrid(lon, lat)
             X, Y = _mollweide_forward(Lon, Lat)
 
             Z = np.log10(toPlot) if map_log10 else toPlot
 
+            # mask any non-finite points
+            bad = ~np.isfinite(X) | ~np.isfinite(Y) | ~np.isfinite(Z)
+            if np.any(bad):
+                X = np.ma.array(X, mask=bad)
+                Y = np.ma.array(Y, mask=bad)
+                Z = np.ma.array(Z, mask=bad)
+
             fig, ax = plt.subplots(figsize=(10, 6))
-            im = ax.pcolormesh(X, Y, Z, cmap='inferno', shading='auto', rasterized=True)
+            im = ax.pcolormesh(X, Y, Z, cmap='inferno', shading='nearest', rasterized=True)
+
             cb = fig.colorbar(im, fraction=0.03, pad=0.04)
             cb.set_label('log10(H density [1/cc])' if map_log10 else 'H density [1/cc]', fontsize=13)
 
-            # Cosmetic: ticks in degrees
-            # x range approx [-2.828, 2.828]; y range [-1.414, 1.414]
             ax.set_aspect('equal', adjustable='box')
             ax.set_xlabel('Longitude')
             ax.set_ylabel('Latitude')
+            ax.set_title(f"Mollweide map at r={float(exosgrid.rvals[ridx]):.2f} RE")
 
-            # Add some tick labels that look like lon/lat
-            # We'll place lon ticks at -150..150 every 60 deg
+            # tick labels in degrees (approximate positions)
             lon_ticks_deg = np.array([-150, -90, -30, 30, 90, 150])
-            lon_ticks = (2.0*np.sqrt(2.0)/np.pi) * np.deg2rad(lon_ticks_deg)  # approx x when theta=0
+            lon_ticks = (2.0*np.sqrt(2.0)/np.pi) * np.deg2rad(lon_ticks_deg)
             ax.set_xticks(lon_ticks)
             ax.set_xticklabels([f"{d}°" for d in lon_ticks_deg])
 
             lat_ticks_deg = np.array([-60, -30, 0, 30, 60])
-            lat_ticks = np.sqrt(2.0) * np.sin(np.deg2rad(lat_ticks_deg))  # approx y mapping
+            lat_ticks = np.sqrt(2.0) * np.sin(np.deg2rad(lat_ticks_deg))
             ax.set_yticks(lat_ticks)
             ax.set_yticklabels([f"{d}°" for d in lat_ticks_deg])
 
-            ax.set_title(f"Mollweide map at r={exosgrid.rvals[temp2]:.2f} RE")
+        return toPlot, H3
 
-        return toPlot, H
-
-    # ---------- MERIDIONAL ----------
+    # ---------- MERIDIONAL (X-Z) ----------
     if plane == 'meridional':
         if (arg < 0) or (arg > 360):
-            print('Azimuthal angle is outside the valid limits')
-            return -1
+            raise ValueError("Azimuthal angle must be within [0, 360] deg.")
 
-        temp2 = int(np.argmin(np.abs(exosgrid.pvals - arg)))
-        toPlot = H[:, temp2, :]  # [theta, r]
+        pidx = int(np.argmin(np.abs(np.asarray(exosgrid.pvals) - arg)))
+        toPlot = H3[:, pidx, :]  # (T,R)
 
         r = np.linspace(exosgrid.rmin, exosgrid.rmax, int(exosgrid.numR))
-        theta = np.linspace(-np.pi/2, np.pi/2, int(exosgrid.numT))
-        R, Theta = np.meshgrid(r, theta)
-        X1 = R*np.cos(Theta)
-        X2 = R*np.sin(Theta)
+        # theta is COLATITUDE (0..pi). For X-Z plane we want latitude-like angle: lat = pi/2 - colat
+        colat = np.deg2rad(np.linspace(exosgrid.tmin, exosgrid.tmax, int(exosgrid.numT)))
+        lat = (0.5*np.pi) - colat
+
+        R, LAT = np.meshgrid(r, lat)
+        X1 = R*np.cos(LAT)
+        X2 = R*np.sin(LAT)
 
         if plotb:
             fig, ax = plt.subplots(figsize=(4.5, 9))
-            im = ax.pcolormesh(X1, X2, np.log10(toPlot), cmap='inferno', linewidth=0, rasterized=True, shading='auto')
+            im = ax.pcolormesh(X1, X2, np.log10(toPlot), cmap='inferno',
+                               linewidth=0, rasterized=True, shading='auto')
             cb = fig.colorbar(im, fraction=0.09, pad=0.04)
             cb.set_label('log10(H density [1/cc])', fontsize=13)
 
@@ -1661,25 +1676,26 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
             ax.set_xlabel('X [RE]')
             ax.set_ylabel('Z [RE]')
 
-            # Earth + half-shadow disk at origin
             _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
                                   angle_deg=shadow_angle_meridional_deg)
 
-        return toPlot, H
+        return toPlot, H3
 
-    # ---------- EQUATORIAL ----------
+    # ---------- EQUATORIAL (X-Y) ----------
     if plane == 'equatorial':
-        toPlot = H[int(exosgrid.numT/2), :, :]  # [phi, r]
+        toPlot = H3[int(exosgrid.numT/2), :, :]  # (P,R)
 
         r = np.linspace(exosgrid.rmin, exosgrid.rmax, int(exosgrid.numR))
-        theta = np.linspace(0, 2*np.pi, int(exosgrid.numP))
-        R, Theta = np.meshgrid(r, theta)
-        X1 = R*np.cos(Theta)
-        X2 = R*np.sin(Theta)
+        ang = np.deg2rad(np.linspace(0, 360, int(exosgrid.numP), endpoint=False))
+        R, ANG = np.meshgrid(r, ang)
+
+        X1 = R*np.cos(ANG)
+        X2 = R*np.sin(ANG)
 
         if plotb:
             fig, ax = plt.subplots(figsize=(9, 9))
-            im = ax.pcolormesh(X1, X2, np.log10(toPlot), cmap='inferno', linewidth=0, rasterized=True, shading='auto')
+            im = ax.pcolormesh(X1, X2, np.log10(toPlot), cmap='inferno',
+                               linewidth=0, rasterized=True, shading='auto')
             cb = fig.colorbar(im, fraction=0.09, pad=0.04)
             cb.set_label('log10(H density [1/cc])', fontsize=13)
 
@@ -1689,14 +1705,12 @@ def draw3DHmodel(model, exosgrid, plane, arg, plotb,
             ax.set_xlabel('X [RE]')
             ax.set_ylabel('Y [RE]')
 
-            # Earth + half-shadow disk at origin
             _add_half_shadow_disk(ax, center=(0.0, 0.0), radius=shadow_radius_re,
                                   angle_deg=shadow_angle_equatorial_deg)
 
-        return toPlot, H
+        return toPlot, H3
 
-    print("plane must be 'map', 'meridional', or 'equatorial'")
-    return -1
+    raise ValueError("plane must be 'map', 'meridional', or 'equatorial'")
 
 #-------------------------------------------------------------------------------
 def draw1DHmodel(model, minrad = 3, maxrad=10, radstep = 0.1,plotb = False):
