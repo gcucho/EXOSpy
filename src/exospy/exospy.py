@@ -96,48 +96,104 @@ def spherical_harmonics(theta):
   return Y_lm
 
 #-------------------------------------------------------------------------------
-def get_density(model,radius,theta,phi):
-  # Verifying they are column vectors
-  #if theta.shape[1] > theta.shape[0]:
-  #  theta = np.transpose(theta)
+def get_density(model, radius, theta, phi):
+    """
+    Backward-compatible wrapper.
 
-  #if phi.shape[1] > phi.shape[0]:
-  #  phi = np.transpose(phi)
+    Inputs come as 1x1 arrays:
+      radius in Re
+      theta in radians BUT representing latitude (because tvals are -90..90)
+      phi in radians (longitude)
 
-  #if radius.shape[1] > radius.shape[0]:
-  #  radius = np.transpose(radius)
+    Converts latitude->colatitude and calls the new 6-model density API.
+    Returns scalar float.
+    """
+    m = str(model).lower().strip()
 
-  n_h = 0 
-  n_radii = 1#radius.shape[0]
+    # unwrap 1x1 arrays
+    r_re  = float(np.asarray(radius).ravel()[0])
+    lat   = float(np.asarray(theta).ravel()[0])   # latitude (rad)
+    lon   = float(np.asarray(phi).ravel()[0])     # longitude (rad)
 
-  N     = np.zeros([n_radii,1])
-  A_lm  = np.zeros([10,n_radii])
-  B_lm  = A_lm
-  Y_lm  = 0 #np.zeros([theta.shape[0],1])
+    # latitude -> colatitude
+    colat = (0.5*np.pi) - lat
 
-  N     = N_coefficients(model,radius)
-  AB    = AB_coefficients(model,radius); 
-  Y_lm  = spherical_harmonics(theta);
+    # Normalize model name (optional but recommended)
+    model_map = {
+        "bailey": "bailey_2008",
+        "bailey2008": "bailey_2008",
+        "bailey_2008": "bailey_2008",
+        "zoennchen2015_min": "zoennchen_2015_min",
+        "zoennchen_2015_min": "zoennchen_2015_min",
+        "z2015_min": "zoennchen_2015_min",
+        "zoennchen2015_max": "zoennchen_2015_max",
+        "zoennchen_2015_max": "zoennchen_2015_max",
+        "z2015_max": "zoennchen_2015_max",
+        "zoennchen2024_2008": "zoennchen_2024_2008",
+        "zoennchen_2024_2008": "zoennchen_2024_2008",
+        "2008": "zoennchen_2024_2008",
+        "zoennchen2024_2013": "zoennchen_2024_2013",
+        "zoennchen_2024_2013": "zoennchen_2024_2013",
+        "2013": "zoennchen_2024_2013",
+        "zoennchen2024_2015": "zoennchen_2024_2015",
+        "zoennchen_2024_2015": "zoennchen_2024_2015",
+        "2015": "zoennchen_2024_2015",
+    }
+    model_name = model_map.get(m, m)
 
-  A_lm  = AB[0:10,:]
-  B_lm  = AB[10:20,:] 
+    # Option A: call dispatcher (recommended)
+    n = h_density(
+        model_name,
+        r=r_re,
+        theta=colat,
+        phi=lon,
+        degrees=False,
+        r_units="Re"
+    )
 
-  #l = 0, m = 0
-  n_h = n_h + (A_lm[0,:]*np.cos(0*phi)+B_lm[0,:]*np.sin(0*phi))*Y_lm[0,:]
-  #l = 1, m = 0, 1
-  n_h = n_h + (A_lm[1,:]*np.cos(0*phi)+B_lm[1,:]*np.sin(0*phi))*Y_lm[1,:] + (A_lm[2,:]*np.cos(1*phi)+B_lm[2,:]*np.sin(1*phi))*Y_lm[2,:]
-  #l = 2, m = 0, 1
-  n_h = n_h + (A_lm[3,:]*np.cos(0*phi)+B_lm[3,:]*np.sin(0*phi))*Y_lm[3,:] + (A_lm[4,:]*np.cos(1*phi)+B_lm[4,:]*np.sin(1*phi))*Y_lm[4,:]
-  #l = 2, m = 2
-  n_h = n_h + (A_lm[5,:]*np.cos(2*phi)+B_lm[5,:]*np.sin(2*phi))*Y_lm[5,:]
-  #l = 3, m = 0, 1
-  n_h = n_h + (A_lm[6,:]*np.cos(0*phi)+B_lm[6,:]*np.sin(0*phi))*Y_lm[6,:] + (A_lm[7,:]*np.cos(1*phi)+B_lm[7,:]*np.sin(1*phi))*Y_lm[7,:]
-  #l = 3, m = 2, 3
-  n_h = n_h + (A_lm[8,:]*np.cos(2*phi)+B_lm[8,:]*np.sin(2*phi))*Y_lm[8,:] + (A_lm[9,:]*np.cos(3*phi)+B_lm[9,:]*np.sin(3*phi))*Y_lm[9,:]
+    return float(np.asarray(n))
+#def get_density(model,radius,theta,phi):
+#  # Verifying they are column vectors
+#  #if theta.shape[1] > theta.shape[0]:
+#  #  theta = np.transpose(theta)
 
-  density = n_h*N*np.sqrt(4*np.pi);
+#  #if phi.shape[1] > phi.shape[0]:
+#  #  phi = np.transpose(phi)
 
-  return density
+#  #if radius.shape[1] > radius.shape[0]:
+#  #  radius = np.transpose(radius)
+
+#  n_h = 0 
+#  n_radii = 1#radius.shape[0]
+
+#  N     = np.zeros([n_radii,1])
+#  A_lm  = np.zeros([10,n_radii])
+#  B_lm  = A_lm
+#  Y_lm  = 0 #np.zeros([theta.shape[0],1])
+
+#  N     = N_coefficients(model,radius)
+#  AB    = AB_coefficients(model,radius); 
+#  Y_lm  = spherical_harmonics(theta);
+
+#  A_lm  = AB[0:10,:]
+#  B_lm  = AB[10:20,:] 
+
+#  #l = 0, m = 0
+#  n_h = n_h + (A_lm[0,:]*np.cos(0*phi)+B_lm[0,:]*np.sin(0*phi))*Y_lm[0,:]
+#  #l = 1, m = 0, 1
+#  n_h = n_h + (A_lm[1,:]*np.cos(0*phi)+B_lm[1,:]*np.sin(0*phi))*Y_lm[1,:] + (A_lm[2,:]*np.cos(1*phi)+B_lm[2,:]*np.sin(1*phi))*Y_lm[2,:]
+#  #l = 2, m = 0, 1
+#  n_h = n_h + (A_lm[3,:]*np.cos(0*phi)+B_lm[3,:]*np.sin(0*phi))*Y_lm[3,:] + (A_lm[4,:]*np.cos(1*phi)+B_lm[4,:]*np.sin(1*phi))*Y_lm[4,:]
+#  #l = 2, m = 2
+#  n_h = n_h + (A_lm[5,:]*np.cos(2*phi)+B_lm[5,:]*np.sin(2*phi))*Y_lm[5,:]
+#  #l = 3, m = 0, 1
+#  n_h = n_h + (A_lm[6,:]*np.cos(0*phi)+B_lm[6,:]*np.sin(0*phi))*Y_lm[6,:] + (A_lm[7,:]*np.cos(1*phi)+B_lm[7,:]*np.sin(1*phi))*Y_lm[7,:]
+#  #l = 3, m = 2, 3
+#  n_h = n_h + (A_lm[8,:]*np.cos(2*phi)+B_lm[8,:]*np.sin(2*phi))*Y_lm[8,:] + (A_lm[9,:]*np.cos(3*phi)+B_lm[9,:]*np.sin(3*phi))*Y_lm[9,:]
+
+#  density = n_h*N*np.sqrt(4*np.pi);
+
+#  return density
 
 #----- DOLON's contribution ----------------------------------------------------
 def func(r,a,b,c,d):
